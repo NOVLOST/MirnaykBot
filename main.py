@@ -1,16 +1,23 @@
 import asyncio
+
 from aiogram import Dispatcher
 
-from app.handler import router,bot
+from app.handler import router, bot, daily_send, daily_scheduler
 
-
+dp = Dispatcher()
+dp.include_router(router)
 
 async def main():
 
-    dp = Dispatcher()
-    dp.include_router(router)
+
     print("Бот включен")
     await dp.start_polling(bot)
+
+# === Регистрация фоновой задачи ===
+@dp.startup()
+async def on_startup():
+    asyncio.create_task(daily_scheduler(bot))
+
 
 if __name__ == '__main__':
     try:
