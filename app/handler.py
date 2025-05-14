@@ -1,4 +1,3 @@
-import os
 import datetime
 import asyncio
 
@@ -7,9 +6,6 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message,CallbackQuery,ReplyKeyboardRemove
 from aiogram.filters import CommandStart
 from aiogram.types import FSInputFile
-from aiogram.utils.text_decorations import markdown_decoration
-
-
 import requests as re
 from bs4 import BeautifulSoup as bs
 
@@ -37,7 +33,8 @@ async def cmd_timetable(message: Message):
     photo = FSInputFile("timetable.jpg")
     now = datetime.date.today()
     print(now - datetime.timedelta(days = 13))
-    await bot.send_photo(chat_id="-1001603940184", photo=photo)
+    await message.answer_photo(photo=photo)
+    
 
 @router.message(F.text == "/sendandpin")
 async def cmd_sendandpin(message: Message,state: FSMContext):
@@ -59,16 +56,19 @@ async def sendandpin_mod(message: Message,state: FSMContext):
         chat_id= "-1001603940184",
         message_id=sent_message.message_id
     )
-
+#-----------------------------
+#парсинг и расслыка сообщений
+#-----------------------------
 async def daily_send(bot: Bot, chat_id:str):
 
-    today_date = datetime.date.today()
-    last_send_day = load_last_time(LAST_TIME_FILE)
+    today_date = datetime.date.today() #берем сегоднящнюю дату
+    last_send_day = load_last_time(LAST_TIME_FILE) #берем дату прошлой отправки
     print(type(today_date.day),type(last_send_day))
+
     if today_date.day != last_send_day :
 
-        old_style_date = str((today_date - datetime.timedelta(days = 13))).replace("-","")
-        message_str = ''
+        old_style_date = str((today_date - datetime.timedelta(days = 13))).replace("-","") #перевод на старый стиль
+        message_str = '' #будущее сообщение
         url = f"https://days.pravoslavie.ru/Days/{old_style_date}.html"
         response = re.get(url,headers=HEADER)
 
@@ -83,40 +83,42 @@ async def daily_send(bot: Bot, chat_id:str):
         print(span_teg)
         #кого поминаем
         data = soup.find("div",class_="DD_TEXT")
-        p_teg = data.find_all("p")
-        for teg in p_teg:
-            markdown_link = f"[{teg.text}](https://days.pravoslavie.ru/Days/20250426.html)"
+        span_teg = data.find_all("span") #в спане лежат теги а которые хранят имена
+
+        links = []
+        a_teg_name = []
+        for teg in span_teg:
+            a_teg = teg.find('a',title=True)
+            a_teg_name.append(a_teg['title'])
+            links.append(a_teg.get('href'))
+
+        print(links)
+        print(a_teg_name)
+
+        for teg,link in zip(a_teg_name,links): #формируем гиперссылки
+
+            markdown_link = f'<a href="{link}">{teg}</a> \n'
             message_str += markdown_link
         message_str += "\n\n"
-        print(p_teg,"P_TEG")
+        print(span_teg,"P_TEG")
         #феофан на каждый день
         data = soup.find("p",class_="DP_FEOF")
-        a_teg = data.find_all("a",class_="DA")
-
         message_str += data.text
-        print(a_teg)
 
-
-        print(data.text)
-        print(span_teg,"\nspan_teg")
-        print(url)
-        message_str = markdown_decoration.quote(message_str)
-        await bot.send_message(chat_id = "-1001603940184" , text = message_str,parse_mode='MarkdownV2' )
-        print("aaaaaa")
-
+        await bot.send_message(chat_id = "-1001603940184" , text = message_str,parse_mode='HTML' )
         save_last_time(today_date.day,LAST_TIME_FILE)
 
-def load_last_time(file_name):
+def load_last_time(file_name): #загрузка последнего времени отправки
     with open(file_name,"r") as file:
 
         return file.read()
 
-async def daily_scheduler(bot: Bot):
+async def daily_scheduler(bot: Bot): #цикл отправки сообщения
     while True:
         await daily_send(bot, CHAT_ID)
         await asyncio.sleep(60*60)  # Проверяем каждые 60 минут
 
-def save_last_time(now_day,file_name):
+def save_last_time(now_day,file_name):#сохранения последенего времени отправки
     with open(file_name,"w") as file:
 
         return file.write(str(now_day))
